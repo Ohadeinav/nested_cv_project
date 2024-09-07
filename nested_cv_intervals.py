@@ -2,9 +2,10 @@ import numpy as np
 from sklearn.model_selection import KFold
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
-from scipy import stats
-import matplotlib.pyplot as plt
+from scipy.stats import norm
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+
 
 class LinearRegressorWithNestedCV:
     def __init__(self, k_outer=5, k_inner=5, quantiles=[0.7, 0.8, 0.9, 0.95]):
@@ -12,16 +13,16 @@ class LinearRegressorWithNestedCV:
         self._k_inner = k_inner  # Inner loop for model selection
         self._model = LinearRegression()
         self._quantiles = quantiles
-        self._all_errors = []
-        self._all_intervals = {}
-        self._miscoverage_rates = {}
+        self._all_errors = []  # Store outer errors
+        self._inner_errors = []  # Store inner errors for each fold
+        self._all_intervals = {}  # Store confidence intervals
+        self._miscoverage_rates = {}  # Store miscoverage rates
 
     def run_on_data(self, X, y, n_repetitions=100):
         """
         Implements nested cross-validation following Algorithm 1.
         It estimates prediction error and MSE using the outer and inner cross-validation loops.
         """
-        all_errors = []  # Collect errors across all repetitions
         a_list = []  # List to store a terms
         b_list = []  # List to store b terms
 
@@ -36,6 +37,9 @@ class LinearRegressorWithNestedCV:
                 # Inner cross-validation to estimate the in-sample error
                 inner_errors = self.inner_crossval(X_train, y_train)
 
+                # Store inner error for later bias correction
+                self._inner_errors.append(np.mean(inner_errors))
+
                 # Train the model on the full training data (excluding test set)
                 self._model.fit(X_train, y_train)
 
@@ -46,21 +50,14 @@ class LinearRegressorWithNestedCV:
                 # Store the outer test error
                 self._all_errors.append(outer_error)
 
-                # Compute (a) and (b) terms
-                a_term = (np.mean(inner_errors) - outer_error) ** 2
-                b_term = np.var(outer_error) / len(test_index)
+        # Compute confidence intervals based on the outer and inner errors
+        self._all_intervals = self.compute_confidence_intervals(self._all_errors, self._inner_errors)
 
-                a_list.append(a_term)
-                b_list.append(b_term)
+        # NEW: Compute the miscoverage rates after generating intervals
+        self._miscoverage_rates = self._compute_miscoverage_rates()
 
-        # Final MSE and error estimates
-        MSE_estimate = np.mean(a_list) - np.mean(b_list)  # Plug-in estimator
         mean_error = np.mean(self._all_errors)
-
-        # Compute confidence intervals based on quantiles
-        self._all_intervals = self.compute_confidence_intervals(self._all_errors)
-
-        return mean_error, MSE_estimate
+        return mean_error, self._all_intervals
 
     def inner_crossval(self, X, y):
         """
@@ -84,32 +81,70 @@ class LinearRegressorWithNestedCV:
 
         return inner_errors
 
-    def compute_confidence_intervals(self, errors):
+    def compute_confidence_intervals(self, outer_errors, inner_errors):
         """
-        Compute confidence intervals for the outer-loop errors based on quantiles.
+        Compute confidence intervals using the method described in Section 4.3 of the paper.
+
+        outer_errors: list of MSE values from the outer cross-validation folds.
+        inner_errors: list of mean MSE values from the inner cross-validation folds.
+
+        Returns:
+            confidence_intervals: A dictionary mapping quantiles to their respective confidence intervals.
         """
-        n = len(errors)
-        errors = np.array(errors)
+        K = len(outer_errors)  # Number of outer folds
+        outer_errors = np.array(outer_errors)
+        inner_errors = np.array(inner_errors)
 
-        # Calculate mean and standard error
-        mean_error = np.mean(errors)
-        std_error = np.std(errors, ddof=1) / np.sqrt(n)
+        # Compute the mean error from outer folds (Err_d(NCV) or \hat{\mu}_{NCV})
+        mean_outer_error = np.mean(outer_errors)
 
+        # Compute the bias term: (mean(inner_errors) - mean(outer_errors))^2
+        bias_term = (np.mean(inner_errors) - mean_outer_error) ** 2
+
+        # Compute the MSE estimate (plug-in estimator)
+        mse_estimate = np.mean((outer_errors - mean_outer_error) ** 2)
+
+        # Dictionary to hold the confidence intervals
         confidence_intervals = {}
 
+        # Loop over the quantiles (confidence levels) provided in self._quantiles
         for level in self._quantiles:
-            z_score = stats.norm.ppf((1 + level) / 2)  # Calculate Z-score
+            # Calculate the z-score for the given confidence level
+            z_score = norm.ppf((1 + level) / 2)
 
-            # Calculate the margin of error
-            margin_of_error = z_score * std_error
+            # Compute the lower and upper bounds for the confidence interval
+            ci_lower = mean_outer_error - bias_term - z_score * np.sqrt(mse_estimate)
+            ci_upper = mean_outer_error + z_score * np.sqrt(mse_estimate)
 
-            # Calculate the confidence interval
-            ci_lower = mean_error - margin_of_error
-            ci_upper = mean_error + margin_of_error
-
+            # Store the confidence interval for the current quantile
             confidence_intervals[level] = (ci_lower, ci_upper)
 
         return confidence_intervals
+
+    # NEW: Method to compute the miscoverage rates
+    def _compute_miscoverage_rates(self):
+        """
+        Computes the miscoverage rate for each quantile based on the errors and the corresponding confidence intervals.
+        Miscoverage rate is calculated as the proportion of test samples where the true error falls outside
+        the confidence interval for the corresponding quantile.
+        """
+        miscoverage_rates = {}
+
+        # Loop over each quantile to calculate miscoverage rates
+        for quantile in self._quantiles:
+            lower_bound, upper_bound = self._all_intervals[quantile]
+
+            # Count the number of errors outside the confidence interval
+            outside_interval_count = sum(
+                1 for error in self._all_errors if error < lower_bound or error > upper_bound
+            )
+
+            # Miscoverage rate = proportion of errors outside the interval
+            miscoverage_rate = outside_interval_count / len(self._all_errors)
+
+            miscoverage_rates[quantile] = miscoverage_rate
+
+        return miscoverage_rates
 
     def plot_graph(self):
         # Extract the quantiles and intervals
@@ -121,18 +156,23 @@ class LinearRegressorWithNestedCV:
 
         # Plot confidence intervals as horizontal lines for each quantile
         for i, q in enumerate(quantiles):
-            plt.hlines(lower_bounds[i], q - 0.02, q + 0.02, color='blue', linestyles='solid', label='Lower Bound' if i == 0 else "")
-            plt.hlines(upper_bounds[i], q - 0.02, q + 0.02, color='red', linestyles='solid', label='Upper Bound' if i == 0 else "")
+            plt.hlines(lower_bounds[i], q - 0.02, q + 0.02, color='blue', linestyles='solid',
+                       label='Lower Bound' if i == 0 else "")
+            plt.hlines(upper_bounds[i], q - 0.02, q + 0.02, color='red', linestyles='solid',
+                       label='Upper Bound' if i == 0 else "")
 
         # Plot all error points per quantile, using transparency (alpha) to show density
         for i, q in enumerate(quantiles):
-            jittered_q = q + np.random.uniform(-0.01, 0.01, size=len(self._all_errors))  # Small jitter to avoid exact overlap
-            plt.scatter(jittered_q, self._all_errors, color='green', s=5, alpha=0.4, label='Test Errors' if i == 0 else "")
+            jittered_q = q + np.random.uniform(-0.01, 0.01,
+                                               size=len(self._all_errors))  # Small jitter to avoid exact overlap
+            plt.scatter(jittered_q, self._all_errors, color='green', s=5, alpha=0.4,
+                        label='Test Errors' if i == 0 else "")
 
         # Annotate miscoverage rates below each quantile
         for i, q in enumerate(quantiles):
-            miscoverage_rate = self._miscoverage_rates.get(q, 0)  # Replace with actual miscoverage calculation
-            plt.text(q, lower_bounds[i] - 0.05, f'Miscoverage: {miscoverage_rate:.2f}', ha='center', va='top', fontsize=9, color='black')
+            miscoverage_rate = self._miscoverage_rates[q]
+            plt.text(q, lower_bounds[i] - 0.05, f'Miscoverage: {miscoverage_rate:.2f}', ha='center', va='top',
+                     fontsize=9, color='black')
 
         # Formatting the plot
         plt.xlabel('Quantiles')
@@ -159,10 +199,10 @@ class CvIntervalsTest:
 
         # Run regressor with nested cross-validation
         regressor = LinearRegressorWithNestedCV(k_outer=self._k_outer, k_inner=self._k_inner)
-        mean_error, MSE_estimate = regressor.run_on_data(X, y, n_repetitions=self._n_repetitions)
+        mean_error, intervals = regressor.run_on_data(X, y, n_repetitions=self._n_repetitions)
 
         print(f"Estimated Prediction Error: {mean_error}")
-        print(f"Estimated MSE: {MSE_estimate}")
+        print("Confidence Intervals: ", intervals)
 
         regressor.plot_graph()
 
