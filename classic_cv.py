@@ -53,7 +53,7 @@ class LinearRegressorWithClassicCV:
 
         for level in confidence_levels:
             # Calculate the Z-score for the given confidence level using SciPy
-            z_score = stats.norm.ppf((1 + level) / 2)
+            z_score = stats.norm.ppf((1 + level) / 2) # TODO: fix this - Z-Score of 1-(alpha/2)
 
             # Calculate the margin of error
             margin_of_error = z_score * std_error
@@ -90,7 +90,7 @@ class CvIntervalsTest:
     def run(self):
         for _ in tqdm(range(self._n_simulations)):
             # Generate data
-            X, y, _ = generate_linear_data(n_samples=1000, n_features=5, noise=0.1)
+            X, y, _ = generate_linear_data(n_samples=100000, n_features=5, noise=0.1)
 
             # Run regressor
             regressor = LinearRegressorWithClassicCV(k=5, test_size=0.2)
@@ -156,7 +156,7 @@ class CvIntervalsTest:
             print(f"{q * 100}% Quantile: {rate:.3f}")
 
 
-def generate_linear_data(n_samples=1000, n_features=5, noise=0.1):
+def generate_linear_data(n_samples=100000, n_features=5, noise=0.1):
     X = np.random.randn(n_samples, n_features)
     true_coefficients = np.random.randn(n_features)
     y = X.dot(true_coefficients) + np.random.randn(n_samples) * noise
@@ -166,7 +166,7 @@ def generate_linear_data(n_samples=1000, n_features=5, noise=0.1):
 
 def main():
 
-    test = CvIntervalsTest(1000, [0.7, 0.8, 0.9, 0.95])
+    test = CvIntervalsTest(1, [0.7, 0.8, 0.9, 0.95])
     test.run()
     test.plot_graph()
 
