@@ -90,7 +90,7 @@ class CvIntervalsTest:
     def run(self):
         for _ in tqdm(range(self._n_simulations)):
             # Generate data
-            X, y, _ = generate_linear_data(n_samples=100000, n_features=5, noise=0.1)
+            X, y, _ = generate_linear_data(n_samples=1000, n_features=5, noise=0.1)
 
             # Run regressor
             regressor = LinearRegressorWithClassicCV(k=5, test_size=0.2)
@@ -156,7 +156,7 @@ class CvIntervalsTest:
             print(f"{q * 100}% Quantile: {rate:.3f}")
 
 
-def generate_linear_data(n_samples=100000, n_features=5, noise=0.1):
+def generate_linear_data(n_samples=1000, n_features=5, noise=0.1):
     X = np.random.randn(n_samples, n_features)
     true_coefficients = np.random.randn(n_features)
     y = X.dot(true_coefficients) + np.random.randn(n_samples) * noise
