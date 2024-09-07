@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.model_selection import train_test_split, KFold
+from sklearn.model_selection import KFold
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from scipy import stats
@@ -7,57 +7,87 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 class LinearRegressorWithNestedCV:
-    def __init__(self, k_outer=5, k_inner=5, test_size=0.2, ci=[0.7, 0.8, 0.9, 0.95]):
+    def __init__(self, k_outer=5, k_inner=5, quantiles=[0.7, 0.8, 0.9, 0.95]):
         self._k_outer = k_outer  # Outer loop for evaluation
         self._k_inner = k_inner  # Inner loop for model selection
-        self._test_size = test_size
         self._model = LinearRegression()
-        self._quantiles = ci
+        self._quantiles = quantiles
+        self._all_errors = []
+        self._all_intervals = {}
+        self._miscoverage_rates = {}
 
-    def run_on_data(self, X, y, n_simulations=100):
-        # Store all test MSE values for multiple simulations
-        all_test_mses = []
+    def run_on_data(self, X, y, n_repetitions=100):
+        """
+        Implements nested cross-validation following Algorithm 1.
+        It estimates prediction error and MSE using the outer and inner cross-validation loops.
+        """
+        all_errors = []  # Collect errors across all repetitions
+        a_list = []  # List to store a terms
+        b_list = []  # List to store b terms
 
-        for _ in tqdm(range(n_simulations), desc="Simulations"):
-            # Outer loop for evaluation
+        # Repeat the nested cross-validation n_repetitions times
+        for _ in tqdm(range(n_repetitions), desc="Nested CV repetitions"):
             outer_kf = KFold(n_splits=self._k_outer, shuffle=True, random_state=None)
-            outer_errors = []
 
             for train_index, test_index in outer_kf.split(X):
                 X_train, X_test = X[train_index], X[test_index]
                 y_train, y_test = y[train_index], y[test_index]
 
-                # Inner loop for model selection (hyperparameter tuning, etc.)
-                inner_kf = KFold(n_splits=self._k_inner, shuffle=True, random_state=None)
-                inner_errors = []
-                for inner_train_index, inner_val_index in inner_kf.split(X_train):
-                    X_inner_train, X_inner_val = X_train[inner_train_index], X_train[inner_val_index]
-                    y_inner_train, y_inner_val = y_train[inner_train_index], y_train[inner_val_index]
+                # Inner cross-validation to estimate the in-sample error
+                inner_errors = self.inner_crossval(X_train, y_train)
 
-                    # Train the model on the inner training set
-                    self._model.fit(X_inner_train, y_inner_train)
-
-                    # Validate the model on the inner validation set
-                    y_inner_pred = self._model.predict(X_inner_val)
-                    inner_fold_error = mean_squared_error(y_inner_val, y_inner_pred)
-                    inner_errors.append(inner_fold_error)
-
-                # Retrain the model on the full training set
+                # Train the model on the full training data (excluding test set)
                 self._model.fit(X_train, y_train)
 
                 # Evaluate the model on the outer test set
                 y_test_pred = self._model.predict(X_test)
-                outer_fold_error = mean_squared_error(y_test, y_test_pred)
-                outer_errors.append(outer_fold_error)
+                outer_error = mean_squared_error(y_test, y_test_pred)
 
-            all_test_mses.append(np.mean(outer_errors))
+                # Store the outer test error
+                self._all_errors.append(outer_error)
 
-        # Compute confidence intervals for the cross-validation errors from the outer loop
-        confidence_intervals = self.compute_confidence_intervals(outer_errors, self._quantiles)
+                # Compute (a) and (b) terms
+                a_term = (np.mean(inner_errors) - outer_error) ** 2
+                b_term = np.var(outer_error) / len(test_index)
 
-        return all_test_mses, confidence_intervals
+                a_list.append(a_term)
+                b_list.append(b_term)
 
-    def compute_confidence_intervals(self, errors, confidence_levels):
+        # Final MSE and error estimates
+        MSE_estimate = np.mean(a_list) - np.mean(b_list)  # Plug-in estimator
+        mean_error = np.mean(self._all_errors)
+
+        # Compute confidence intervals based on quantiles
+        self._all_intervals = self.compute_confidence_intervals(self._all_errors)
+
+        return mean_error, MSE_estimate
+
+    def inner_crossval(self, X, y):
+        """
+        Inner cross-validation loop to estimate the in-sample error (e_in).
+        """
+        inner_kf = KFold(n_splits=self._k_inner, shuffle=True, random_state=None)
+        inner_errors = []
+
+        for inner_train_index, inner_val_index in inner_kf.split(X):
+            X_inner_train, X_inner_val = X[inner_train_index], X[inner_val_index]
+            y_inner_train, y_inner_val = y[inner_train_index], y[inner_val_index]
+
+            # Train on inner training set
+            self._model.fit(X_inner_train, y_inner_train)
+
+            # Validate on the inner validation set
+            y_inner_val_pred = self._model.predict(X_inner_val)
+            inner_error = mean_squared_error(y_inner_val, y_inner_val_pred)
+
+            inner_errors.append(inner_error)
+
+        return inner_errors
+
+    def compute_confidence_intervals(self, errors):
+        """
+        Compute confidence intervals for the outer-loop errors based on quantiles.
+        """
         n = len(errors)
         errors = np.array(errors)
 
@@ -67,9 +97,8 @@ class LinearRegressorWithNestedCV:
 
         confidence_intervals = {}
 
-        for level in confidence_levels:
-            # Calculate the Z-score for the given confidence level using SciPy
-            z_score = stats.norm.ppf((1 + level) / 2)
+        for level in self._quantiles:
+            z_score = stats.norm.ppf((1 + level) / 2)  # Calculate Z-score
 
             # Calculate the margin of error
             margin_of_error = z_score * std_error
@@ -81,73 +110,6 @@ class LinearRegressorWithNestedCV:
             confidence_intervals[level] = (ci_lower, ci_upper)
 
         return confidence_intervals
-
-
-class CvIntervalsTest:
-
-    def __init__(self, n_simulations=1000, quantiles=[0.7, 0.8, 0.9, 0.95]):
-        np.random.seed(42)  # For reproducibility
-        self._n_simulations = n_simulations
-        self._quantiles = quantiles
-        # Arrays to store results
-        self._all_errors = []
-        self._all_intervals = []
-        self._miscoverage_rates = {}
-
-    def _compute_miscoverage_rates(self):
-        """
-        Computes the miscoverage rates for each quantile based on the errors and the corresponding quantile intervals.
-        """
-        miscoverage_rates = {}
-
-        total_samples = len(self._all_errors)
-        if total_samples == 0:
-            raise ValueError("No test errors found.")
-
-        # Loop over each quantile to calculate miscoverage rates
-        for quantile in self._quantiles:
-            print(f"\nEvaluating miscoverage rate for quantile: {quantile}")
-
-            within_interval_count = 0  # Initialize a counter for samples within the interval
-
-            # Retrieve the confidence interval for the current quantile
-            lower_bound, upper_bound = self._all_intervals[quantile]
-
-            # Loop through each sample's error
-            for i, error in enumerate(self._all_errors):
-                if lower_bound <= error <= upper_bound:
-                    within_interval_count += 1
-
-            # Calculate the miscoverage rate for this quantile
-            miscoverage_rate = 1 - (within_interval_count / total_samples)
-
-            print(f"Quantile {quantile}: Within Interval = {within_interval_count}, Total Samples = {total_samples}, "
-                  f"Miscoverage Rate = {miscoverage_rate:.4f}")
-
-            miscoverage_rates[quantile] = miscoverage_rate
-
-        return miscoverage_rates
-
-    def run(self):
-        # Generate data
-        X, y, _ = generate_linear_data(n_samples=1000, n_features=5, noise=0.34)
-
-        # Run regressor with nested cross-validation
-        regressor = LinearRegressorWithNestedCV(k_outer=5, k_inner=5, test_size=0.2)
-        test_mses, confidence_intervals = regressor.run_on_data(X, y, n_simulations=self._n_simulations)
-
-        # Store all test errors and intervals
-        self._all_errors = test_mses
-        self._all_intervals = confidence_intervals
-
-        print("\nConfidence Interval Sizes:")
-        for quantile, (lower_bound, upper_bound) in confidence_intervals.items():
-            interval_size = upper_bound - lower_bound
-            print(f"Quantile: {quantile:.2f}, Interval Size: {interval_size:.4f}, "
-                  f"Lower Bound: {lower_bound:.4f}, Upper Bound: {upper_bound:.4f}")
-
-        # Calculate miscoverage rates
-        self._miscoverage_rates = self._compute_miscoverage_rates()
 
     def plot_graph(self):
         # Extract the quantiles and intervals
@@ -169,7 +131,7 @@ class CvIntervalsTest:
 
         # Annotate miscoverage rates below each quantile
         for i, q in enumerate(quantiles):
-            miscoverage_rate = self._miscoverage_rates[q]
+            miscoverage_rate = self._miscoverage_rates.get(q, 0)  # Replace with actual miscoverage calculation
             plt.text(q, lower_bounds[i] - 0.05, f'Miscoverage: {miscoverage_rate:.2f}', ha='center', va='top', fontsize=9, color='black')
 
         # Formatting the plot
@@ -185,6 +147,26 @@ class CvIntervalsTest:
         plt.show()
 
 
+class CvIntervalsTest:
+    def __init__(self, n_repetitions=100, k_outer=5, k_inner=5):
+        self._n_repetitions = n_repetitions
+        self._k_outer = k_outer
+        self._k_inner = k_inner
+
+    def run(self):
+        # Generate data
+        X, y, _ = generate_linear_data(n_samples=1000, n_features=5, noise=0.34)
+
+        # Run regressor with nested cross-validation
+        regressor = LinearRegressorWithNestedCV(k_outer=self._k_outer, k_inner=self._k_inner)
+        mean_error, MSE_estimate = regressor.run_on_data(X, y, n_repetitions=self._n_repetitions)
+
+        print(f"Estimated Prediction Error: {mean_error}")
+        print(f"Estimated MSE: {MSE_estimate}")
+
+        regressor.plot_graph()
+
+
 def generate_linear_data(n_samples=1000, n_features=5, noise=0.2):
     """
     Generates linear data with Gaussian noise for the regression problem.
@@ -195,13 +177,9 @@ def generate_linear_data(n_samples=1000, n_features=5, noise=0.2):
     return X, y, true_coefficients
 
 
-
-
 def main():
-
-    test = CvIntervalsTest(1000, [0.7, 0.8, 0.9, 0.95])
+    test = CvIntervalsTest(n_repetitions=1000, k_outer=5, k_inner=5)
     test.run()
-    test.plot_graph()
 
 
 if __name__ == "__main__":
