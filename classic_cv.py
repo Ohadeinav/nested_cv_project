@@ -53,7 +53,7 @@ class LinearRegressorWithClassicCV:
 
         for level in confidence_levels:
             # Calculate the Z-score for the given confidence level using SciPy
-            z_score = stats.norm.ppf((1 + level) / 2) # TODO: fix this - Z-Score of 1-(alpha/2)
+            z_score = stats.norm.ppf((1 + level) / 2) #  1-(alpha/2) = (1+level)/2
 
             # Calculate the margin of error
             margin_of_error = z_score * std_error
