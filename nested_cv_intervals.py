@@ -103,15 +103,7 @@ class LinearRegressorWithNestedCV:
         return inner_errors
 
     def compute_confidence_intervals(self, outer_errors, inner_errors):
-        """
-        Compute confidence intervals using the method described in Section 4.3 of the paper.
 
-        outer_errors: list of MSE values from the outer cross-validation folds.
-        inner_errors: list of mean MSE values from the inner cross-validation folds.
-
-        Returns:
-            confidence_intervals: A dictionary mapping quantiles to their respective confidence intervals.
-        """
         K = len(outer_errors)  # Number of outer folds
         outer_errors = np.array(outer_errors)
         inner_errors = np.array(inner_errors)
@@ -135,7 +127,7 @@ class LinearRegressorWithNestedCV:
 
             # Compute the lower and upper bounds for the confidence interval
             ci_lower = mean_outer_error - bias_term - z_score * np.sqrt(mse_estimate)
-            ci_upper = mean_outer_error + z_score * np.sqrt(mse_estimate)
+            ci_upper = mean_outer_error - bias_term + z_score * np.sqrt(mse_estimate)
 
             # Store the confidence interval for the current quantile
             confidence_intervals[level] = (ci_lower, ci_upper)
@@ -157,11 +149,11 @@ class LinearRegressorWithNestedCV:
 
             # Count the number of errors outside the confidence interval
             outside_interval_count = sum(
-                1 for error in self._all_errors if error < lower_bound or error > upper_bound
+                1 for error in self.all_test_mses if error < lower_bound or error > upper_bound
             )
 
             # Miscoverage rate = proportion of errors outside the interval
-            miscoverage_rate = outside_interval_count / len(self._all_errors)
+            miscoverage_rate = outside_interval_count / len(self.all_test_mses)
 
             miscoverage_rates[quantile] = miscoverage_rate
 
