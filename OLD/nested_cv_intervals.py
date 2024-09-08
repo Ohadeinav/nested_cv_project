@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from scipy.stats import norm
@@ -14,38 +14,46 @@ class LinearRegressorWithNestedCV:
         self._model = LinearRegression()
         self._quantiles = quantiles
         self._all_errors = []  # Store outer errors
+        self._test_errors = []
         self._inner_errors = []  # Store inner errors for each fold
         self._all_intervals = {}  # Store confidence intervals
         self._miscoverage_rates = {}  # Store miscoverage rates
+
+        self.X_train =None
+        self.X_test = None
+        self.y_train = None
+        self.y_test = None
 
     def run_on_data(self, X, y, n_repetitions=100):
         """
         Implements nested cross-validation following Algorithm 1.
         It estimates prediction error and MSE using the outer and inner cross-validation loops.
         """
+
         a_list = []  # List to store a terms
         b_list = []  # List to store b terms
 
         # Repeat the nested cross-validation n_repetitions times
         for _ in tqdm(range(n_repetitions), desc="Nested CV repetitions"):
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=None)
             outer_kf = KFold(n_splits=self._k_outer, shuffle=True, random_state=None)
 
-            for train_index, test_index in outer_kf.split(X):
-                X_train, X_test = X[train_index], X[test_index]
-                y_train, y_test = y[train_index], y[test_index]
+            for train_index, val_index in outer_kf.split(X_train):
+                X_train_fold, X_val_fold = X[train_index], X[val_index]
+                y_train_fold, y_val_fold = y[train_index], y[val_index]
 
                 # Inner cross-validation to estimate the in-sample error
-                inner_errors = self.inner_crossval(X_train, y_train)
+                inner_errors = self.inner_crossval(X_train_fold, y_train_fold)
 
                 # Store inner error for later bias correction
                 self._inner_errors.append(np.mean(inner_errors))
 
                 # Train the model on the full training data (excluding test set)
-                self._model.fit(X_train, y_train)
+                self._model.fit(X_train_fold, y_train_fold)
 
                 # Evaluate the model on the outer test set
-                y_test_pred = self._model.predict(X_test)
-                outer_error = mean_squared_error(y_test, y_test_pred)
+                y_val_pred = self._model.predict(X_val_fold)
+                outer_error = mean_squared_error(y_val_fold, y_val_pred)
 
                 # Store the outer test error
                 self._all_errors.append(outer_error)
@@ -53,7 +61,11 @@ class LinearRegressorWithNestedCV:
         # Compute confidence intervals based on the outer and inner errors
         self._all_intervals = self.compute_confidence_intervals(self._all_errors, self._inner_errors)
 
-        # NEW: Compute the miscoverage rates after generating intervals
+        # Evaluate the model on the global test set
+        # glolbal_y_test_pred = self._model.predict(self.X_test)
+        # self._test_errors = mean_squared_error(self.y_test, glolbal_y_test_pred)
+
+        # Compute the miscoverage rates after generating intervals
         self._miscoverage_rates = self._compute_miscoverage_rates()
 
         mean_error = np.mean(self._all_errors)
@@ -164,7 +176,7 @@ class LinearRegressorWithNestedCV:
         # Plot all error points per quantile, using transparency (alpha) to show density
         for i, q in enumerate(quantiles):
             jittered_q = q + np.random.uniform(-0.01, 0.01,
-                                               size=len(self._all_errors))  # Small jitter to avoid exact overlap
+                                               size=len(self._test_errors))  # Small jitter to avoid exact overlap
             plt.scatter(jittered_q, self._all_errors, color='green', s=5, alpha=0.4,
                         label='Test Errors' if i == 0 else "")
 
