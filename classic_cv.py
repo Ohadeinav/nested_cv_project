@@ -99,11 +99,11 @@ class CvIntervalsTest:
             self._all_errors.append(test_mse)
             self._all_intervals.append(confidence_intervals)
 
-            print("\nConfidence Interval Sizes:")
-            for quantile, (lower_bound, upper_bound) in confidence_intervals.items():
-                interval_size = upper_bound - lower_bound
-                print(f"Quantile: {quantile:.2f}, Interval Size: {interval_size:.4f}, "
-                      f"Lower Bound: {lower_bound:.4f}, Upper Bound: {upper_bound:.4f}")
+            # print("\nConfidence Interval Sizes:")
+            # for quantile, (lower_bound, upper_bound) in confidence_intervals.items():
+            #     interval_size = upper_bound - lower_bound
+            #     print(f"Quantile: {quantile:.2f}, Interval Size: {interval_size:.4f}, "
+            #           f"Lower Bound: {lower_bound:.4f}, Upper Bound: {upper_bound:.4f}")
 
         # Calculate miscoverage rates
         self._miscoverage_rates = self._compute_miscoverage_rates()
