@@ -13,7 +13,7 @@ class LinearRegressorWithClassicCV:
         self._model = LinearRegression()
         self._quantiles = ci
 
-    def run_on_data(self, X, y, n_simulations=1000):
+    def run_on_data(self, X, y, n_simulations=100):
         # Store all test MSE values for multiple simulations
         all_test_mses = []
 
