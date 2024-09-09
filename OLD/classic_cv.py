@@ -69,7 +69,7 @@ class LinearRegressorWithClassicCV:
 
 class CvIntervalsTest:
 
-    def __init__(self, n_simulations=1000, quantiles=[0.7, 0.8, 0.9, 0.95]):
+    def __init__(self, n_simulations=1000, quantiles=[0.7, 0.8, 0.9, 0.95], X_data=None, y_data=None):
         np.random.seed(42)  # For reproducibility
         self._n_simulations = n_simulations
         self._quantiles = quantiles
@@ -77,7 +77,8 @@ class CvIntervalsTest:
         self._all_errors = []
         self._all_intervals = []
         self._miscoverage_rates = {}
-
+        self._X_data = X_data
+        self._y_data = y_data
     def _compute_miscoverage_rates(self):
         miscoverage_rates = {}
         for q in self._quantiles:
@@ -89,12 +90,13 @@ class CvIntervalsTest:
 
     def run(self):
         for _ in tqdm(range(self._n_simulations)):
-            # Generate data
-            X, y, _ = generate_linear_data(n_samples=1000, n_features=5, noise=0.34)
+            if self._X_data is None and self._y_data is None:
+                # Generate data
+                self._X_data, self._y_data, _ = generate_linear_data(n_samples=1000, n_features=5, noise=0.34)
 
             # Run regressor
             regressor = LinearRegressorWithClassicCV(k=5, test_size=0.2)
-            test_mse, confidence_intervals = regressor.run_on_data(X, y)
+            test_mse, confidence_intervals = regressor.run_on_data(self._X_data, self._y_data)
 
             self._all_errors.append(test_mse)
             self._all_intervals.append(confidence_intervals)
@@ -175,13 +177,13 @@ def generate_linear_data(n_samples=1000, n_features=5, noise=0.2):
 
 
 
-def main():
+# def main():
+#
+#     test = CvIntervalsTest(1000, [0.7, 0.8, 0.9, 0.95])
+#     test.run()
+#     test.plot_graph()
 
-    test = CvIntervalsTest(1000, [0.7, 0.8, 0.9, 0.95])
-    test.run()
-    test.plot_graph()
-
-
-if __name__ == "__main__":
-    main()
+#
+# if __name__ == "__main__":
+#     main()
 

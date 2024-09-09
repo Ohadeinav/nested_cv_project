@@ -9,7 +9,7 @@ if [ ! -d $output_dir ]; then
   exit 1
 fi
 
-curl 
+curl -LO
 
 cd $output_dir
 

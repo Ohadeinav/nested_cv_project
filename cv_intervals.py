@@ -74,7 +74,7 @@ class LinearRegressorWithClassicCV:
 
 class CvIntervalsTest:
 
-    def __init__(self, n_simulations=1000, quantiles=[0.7, 0.8, 0.9, 0.95]):
+    def __init__(self, n_simulations=1000, quantiles=[0.7, 0.8, 0.9, 0.95],X_data=None, y_data=None):
         np.random.seed(42)  # For reproducibility
         self._n_simulations = n_simulations
         self._quantiles = quantiles
@@ -82,6 +82,8 @@ class CvIntervalsTest:
         self._all_errors = []
         self._all_intervals = []
         self._miscoverage_rates = {}
+        self._X_data = X_data.to_numpy()
+        self._y_data = y_data.to_numpy()
 
     def _compute_miscoverage_rates(self):
         """
@@ -122,12 +124,14 @@ class CvIntervalsTest:
         return miscoverage_rates
 
     def run(self):
-        # Generate data
-        X, y, _ = generate_linear_data(n_samples=1000, n_features=5, noise=0.34)
+
+        if self._X_data is None and self._y_data is None:
+            # Generate data
+            self._X_data, self._y_data, _ = generate_linear_data(n_samples=1000, n_features=5, noise=0.34)
 
         # Run regressor
         regressor = LinearRegressorWithClassicCV(k=5, test_size=0.2)
-        test_mses, confidence_intervals = regressor.run_on_data(X, y, n_simulations=self._n_simulations)
+        test_mses, confidence_intervals = regressor.run_on_data(self._X_data,self._y_data, n_simulations=self._n_simulations)
 
         # Store all test errors and intervals
         self._all_errors = test_mses
