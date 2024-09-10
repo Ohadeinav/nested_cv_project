@@ -212,7 +212,7 @@ class CvIntervalsTest:
 
     def run(self):
         # Generate data
-        X, y, _ = generate_linear_data(n_samples=1000, n_features=5, noise=0.34)
+        X, y, _ = generate_linear_data(n_samples=10000, n_features=5, noise=0.34)
 
         # Run regressor with nested cross-validation
         regressor = LinearRegressorWithNestedCV(k_outer=self._k_outer, k_inner=self._k_inner)
