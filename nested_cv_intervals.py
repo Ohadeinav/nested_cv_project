@@ -52,15 +52,17 @@ class LinearRegressorWithNestedCV:
                 self._inner_errors.append(np.mean(inner_errors))
 
                 # Train the model on the full training data (excluding test set)
-                self._model.fit(X_train_fold, y_train_fold)
+                model = LinearRegression()
+                model.fit(X_train_fold, y_train_fold)
+                #self._model.fit(X_train_fold, y_train_fold)
 
                 # Evaluate the model on the outer test set
-                y_val_pred = self._model.predict(X_val_fold)
+                y_val_pred = model.predict(X_val_fold)
                 outer_error = mean_squared_error(y_val_fold, y_val_pred)
 
                 # Store the outer test error
                 self._all_errors.append(outer_error)
-
+            self._model.fit(X_train, y_train)
             y_test_pred = self._model.predict(X_test)
             test_mse = mean_squared_error(y_test, y_test_pred)
             self.all_test_mses.append(test_mse)
