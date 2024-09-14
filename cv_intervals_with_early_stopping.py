@@ -174,31 +174,44 @@ class NestedCV_LinearRegressorWithEarlyStopping:
 
         return miscoverage_rates
 
+
     def plot_graph(self):
+        # Extract the quantiles and intervals
         quantiles = list(self._all_intervals.keys())
         lower_bounds = [self._all_intervals[q][0] for q in quantiles]
         upper_bounds = [self._all_intervals[q][1] for q in quantiles]
 
         plt.figure(figsize=(10, 6))
 
+        # Plot confidence intervals as horizontal lines for each quantile
         for i, q in enumerate(quantiles):
-            plt.hlines(lower_bounds[i], q - 0.02, q + 0.02, color='blue', linestyles='solid', label='Lower Bound' if i == 0 else "")
-            plt.hlines(upper_bounds[i], q - 0.02, q + 0.02, color='red', linestyles='solid', label='Upper Bound' if i == 0 else "")
+            plt.hlines(lower_bounds[i], q - 0.02, q + 0.02, color='blue', linestyles='solid',
+                       label='Lower Bound' if i == 0 else "")
+            plt.hlines(upper_bounds[i], q - 0.02, q + 0.02, color='red', linestyles='solid',
+                       label='Upper Bound' if i == 0 else "")
 
+        # Plot all error points per quantile, using transparency (alpha) to show density
         for i, q in enumerate(quantiles):
-            jittered_q = np.repeat(q, len(self.all_test_mses)) + np.random.uniform(-0.01, 0.01, size=len(self.all_test_mses))
-            plt.scatter(jittered_q, self.all_test_mses, color='green', s=5, alpha=0.4, label='Test Errors' if i == 0 else "")
+            jittered_q = np.repeat(q, len(self.all_test_mses)) + np.random.uniform(-0.01, 0.01,
+                                                                                   size=len(self.all_test_mses))
+            plt.scatter(jittered_q, self.all_test_mses, color='green', s=5, alpha=0.4,
+                        label='Test Errors' if i == 0 else "")
 
+        # Add miscoverage rates to the legend
         for i, q in enumerate(quantiles):
             miscoverage_rate = self._miscoverage_rates[q]
-            plt.text(q, lower_bounds[i] - 0.05, f'Miscoverage: {miscoverage_rate:.2f}', ha='center', va='top', fontsize=9, color='black')
+            plt.plot([], [], ' ', label=f'Quantile {q}: Miscoverage {miscoverage_rate:.2f}')
 
+        # Formatting the plot
         plt.xlabel('Quantiles')
         plt.ylabel('Error / Interval Bounds')
         plt.title('Test Errors and Confidence Intervals across Quantiles')
-        plt.legend(loc='upper left', bbox_to_anchor=(1, 1), frameon=False)
+
+        # Move the legend to the right side of the graph
+        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), frameon=False)
         plt.grid(True)
-        plt.tight_layout()
+        plt.tight_layout()  # Adjust layout so the legend doesn't overlap
+
         plt.show()
 
 
@@ -210,7 +223,9 @@ def generate_linear_data(n_samples=1000, n_features=5, noise=0.2):
 
 
 class CvIntervalsWithEarlyStoppingTest:
-    def __init__(self, n_repetitions=1000, quantiles=[0.7, 0.8, 0.9, 0.95]):
+    def __init__(self, n_repetitions=1000, quantiles=None):
+        if quantiles is None:
+            quantiles = [0.7, 0.8, 0.9, 0.95]
         self.n_repetitions = n_repetitions
         self.quantiles = quantiles
 

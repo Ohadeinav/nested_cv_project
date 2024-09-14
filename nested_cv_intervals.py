@@ -159,7 +159,6 @@ class LinearRegressorWithNestedCV:
 
         return miscoverage_rates
 
-
     def plot_graph(self):
         # Extract the quantiles and intervals
         quantiles = list(self._all_intervals.keys())
@@ -177,27 +176,23 @@ class LinearRegressorWithNestedCV:
 
         # Plot all error points per quantile, using transparency (alpha) to show density
         for i, q in enumerate(quantiles):
-            # Repeat the quantile value for each test error
-            # jittered_q = np.repeat(q, len(self._all_errors)) + np.random.uniform(-0.01, 0.01, size=len(self._all_errors))
-            # plt.scatter(jittered_q, self._all_errors, color='green', s=5, alpha=0.4, label='Test Errors' if i == 0 else "")
             jittered_q = np.repeat(q, len(self.all_test_mses)) + np.random.uniform(-0.01, 0.01,
-                                                                                 size=len(self.all_test_mses))
+                                                                                   size=len(self.all_test_mses))
             plt.scatter(jittered_q, self.all_test_mses, color='green', s=5, alpha=0.4,
                         label='Test Errors' if i == 0 else "")
 
-        # Annotate miscoverage rates below each quantile
+        # Add miscoverage rates to the legend
         for i, q in enumerate(quantiles):
             miscoverage_rate = self._miscoverage_rates[q]
-            plt.text(q, lower_bounds[i] - 0.05, f'Miscoverage: {miscoverage_rate:.2f}', ha='center', va='top',
-                     fontsize=9, color='black')
+            plt.plot([], [], ' ', label=f'Quantile {q}: Miscoverage {miscoverage_rate:.2f}')
 
         # Formatting the plot
         plt.xlabel('Quantiles')
         plt.ylabel('Error / Interval Bounds')
         plt.title('Test Errors and Confidence Intervals across Quantiles')
 
-        # Move the legend to the upper right outside the plot
-        plt.legend(loc='upper left', bbox_to_anchor=(1, 1), frameon=False)
+        # Move the legend to the right side of the graph
+        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), frameon=False)
         plt.grid(True)
         plt.tight_layout()  # Adjust layout so the legend doesn't overlap
 
@@ -229,7 +224,7 @@ def generate_linear_data(n_samples=1000, n_features=5, noise=0.2):
     Generates linear data with Gaussian noise for the regression problem.
     """
     X = np.random.randn(n_samples, n_features)
-    true_coefficients = np.random.randn(n_features)
+    true_coefficients = [ 0.19938878,  0.36693129, -0.83037629,  1.11561449, -1.22679938] #np.random.randn(n_features)
     y = X.dot(true_coefficients) + np.random.normal(loc=0, scale=1, size=n_samples) * noise
     return X, y, true_coefficients
 
