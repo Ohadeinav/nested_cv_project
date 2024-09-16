@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 
 class NestedCV_LinearRegressorWithEarlyStopping:
-    def __init__(self, k_outer=5, k_inner=5, quantiles=[0.7, 0.8, 0.9, 0.95], early_stop_quantile=0.95, epsilon=0.00001):
+    def __init__(self, k_outer=5, k_inner=5, quantiles=[0.7, 0.8, 0.9, 0.95], early_stop_quantile=0.95, epsilon=0.00001, patience = 100):
         self._k_outer = k_outer  # Outer loop for evaluation
         self._k_inner = k_inner  # Inner loop for model selection
         self._model = LinearRegression()
@@ -20,7 +20,7 @@ class NestedCV_LinearRegressorWithEarlyStopping:
         self._miscoverage_rates = {}  # Store miscoverage rates
         self._early_stop_quantile = early_stop_quantile
         self._epsilon = epsilon  # Threshold for early stopping
-
+        self._patience = patience  # Number of iterations to wait before early stopping
         self.X_train = None
         self.X_test = None
         self.y_train = None
@@ -34,7 +34,7 @@ class NestedCV_LinearRegressorWithEarlyStopping:
         """
         Implements nested cross-validation following Algorithm 1 with early stopping.
         """
-        max_fits = n_repetitions * self._k_outer * self._k_inner # Maximum number of outer fits
+        max_fits = n_repetitions * self._k_outer * (1+self._k_inner) # Maximum number of outer fits
         early_stopped = False
         inner_loop_iterations = 0
         early_stopping_counter = 0
@@ -50,12 +50,10 @@ class NestedCV_LinearRegressorWithEarlyStopping:
                 if stop_calc_intervals == False:
                     # Inner cross-validation to estimate the in-sample error
                     inner_errors = self.inner_crossval(X_train_fold, y_train_fold)
-
                     # Store inner error for later bias correction
                     self._inner_errors.append(np.mean(inner_errors))
 
                 # Train the model on the full training data (excluding test set)
-
                     self._model.fit(X_train_fold, y_train_fold)
                     self.total_fits += 1  # Increment fit counter
 
@@ -74,13 +72,14 @@ class NestedCV_LinearRegressorWithEarlyStopping:
                     # Print the chosen interval bounds
                     #print(f"Chosen Quantile: {self._early_stop_quantile}, Lower Bound: {chosen_interval[0]}, Upper Bound: {chosen_interval[1]}")
 
+                    # should we normalize by size of error??
                     if self.previous_interval is not None and inner_loop_iterations >= 1:
                         if abs(chosen_interval[0] - self.previous_interval[0]) < self._epsilon and \
                                 abs(chosen_interval[1] - self.previous_interval[1]) < self._epsilon:
                             #print(f"Early stopping triggered for quantile {self._early_stop_quantile} after {self.total_fits} fits.")
 
                             early_stopping_counter +=1
-                            if early_stopping_counter > 400:
+                            if early_stopping_counter > self._patience: #change to parameter patience
                                 early_stopped = True
                                 stop_calc_intervals = True
                     else:
@@ -104,7 +103,7 @@ class NestedCV_LinearRegressorWithEarlyStopping:
         # Print final statistics on early stopping
         print(f"Total fits performed: {self.total_fits} out of {max_fits} possible.")
 
-        return mean_error, self._all_intervals, self.total_fits, max_fits
+        return mean_error, self._all_intervals, self._miscoverage_rates, self.total_fits, max_fits
 
     def inner_crossval(self, X, y):
         inner_kf = KFold(n_splits=self._k_inner, shuffle=True, random_state=None)
@@ -205,15 +204,13 @@ class NestedCV_LinearRegressorWithEarlyStopping:
         # Formatting the plot
         plt.xlabel('Quantiles')
         plt.ylabel('Error / Interval Bounds')
-        plt.title('Test Errors and Confidence Intervals across Quantiles')
+        plt.title('Early stopping Confidence Intervals')
 
         # Move the legend to the right side of the graph
         plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), frameon=False)
         plt.grid(True)
         plt.tight_layout()  # Adjust layout so the legend doesn't overlap
-
         plt.show()
-
 
 def generate_linear_data(n_samples=1000, n_features=5, noise=0.2):
     X = np.random.randn(n_samples, n_features)
@@ -223,26 +220,27 @@ def generate_linear_data(n_samples=1000, n_features=5, noise=0.2):
 
 
 class CvIntervalsWithEarlyStoppingTest:
-    def __init__(self, n_repetitions=1000, quantiles=None):
-        if quantiles is None:
-            quantiles = [0.7, 0.8, 0.9, 0.95]
+    def __init__(self, n_repetitions=1000, quantiles=[0.7,0.8,0.9,0.95], k_outer=5, k_inner=5, epsilon=0.00001, patience=100):
         self.n_repetitions = n_repetitions
         self.quantiles = quantiles
-
+        self.k_outer = k_outer
+        self.k_inner = k_inner
+        self.epsilon = epsilon
+        self.patience = patience
     def run(self):
         X, y, _ = generate_linear_data(n_samples=10000, n_features=5, noise=0.34)
         regressor = NestedCV_LinearRegressorWithEarlyStopping(k_outer=5, k_inner=5, quantiles=self.quantiles)
-        mean_error, intervals, total_fits, max_fits = regressor.run_on_data(X, y, n_repetitions=self.n_repetitions)
+        mean_error, intervals, miscoverage_rates, total_fits, max_fits = regressor.run_on_data(X, y, n_repetitions=self.n_repetitions)
 
         print(f"Estimated Prediction Error: {mean_error}")
         print(f"Confidence Intervals: {intervals}")
         print(f"Total Fits Performed: {total_fits} / {max_fits}")
 
-        regressor.plot_graph()
-
+        return mean_error, intervals, miscoverage_rates, total_fits, max_fits
+        #regressor.plot_graph()
 
 def main():
-    test = CvIntervalsWithEarlyStoppingTest(n_repetitions=1000, quantiles=[0.7, 0.8, 0.9, 0.95])
+    test = CvIntervalsWithEarlyStoppingTest(n_repetitions=20, quantiles=[0.7, 0.8, 0.9, 0.95])
     test.run()
 
 
