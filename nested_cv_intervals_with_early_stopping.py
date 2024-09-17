@@ -229,7 +229,8 @@ class CvIntervalsWithEarlyStoppingTest:
         self.patience = patience
     def run(self):
         X, y, _ = generate_linear_data(n_samples=10000, n_features=5, noise=0.34)
-        regressor = NestedCV_LinearRegressorWithEarlyStopping(k_outer=5, k_inner=5, quantiles=self.quantiles)
+        regressor = NestedCV_LinearRegressorWithEarlyStopping(k_outer=5, k_inner=5, quantiles=self.quantiles,
+                                                              epsilon  = self.epsilon, patience = self.patience)
         mean_error, intervals, miscoverage_rates, total_fits, max_fits = regressor.run_on_data(X, y, n_repetitions=self.n_repetitions)
 
         print(f"Estimated Prediction Error: {mean_error}")

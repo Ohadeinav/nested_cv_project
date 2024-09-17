@@ -80,7 +80,7 @@ class LinearRegressorWithNestedCV:
         self._miscoverage_rates = self._compute_miscoverage_rates()
 
         mean_error = np.mean(self._all_errors)
-        return mean_error, self._all_intervals
+        return mean_error, self._all_intervals, self._miscoverage_rates
 
     def inner_crossval(self, X, y):
         """
@@ -202,24 +202,25 @@ class LinearRegressorWithNestedCV:
 
 
 class CvIntervalsTest:
-    def __init__(self, n_repetitions=100, k_outer=5, k_inner=5):
+    def __init__(self, n_repetitions=100, quantiles =[0.7,0.8,0.9,0.95],k_outer=5, k_inner=5):
         self._n_repetitions = n_repetitions
         self._k_outer = k_outer
         self._k_inner = k_inner
+        self._quantiles = quantiles
 
     def run(self):
         # Generate data
         X, y, _ = generate_linear_data(n_samples=10000, n_features=5, noise=0.34)
 
         # Run regressor with nested cross-validation
-        regressor = LinearRegressorWithNestedCV(k_outer=self._k_outer, k_inner=self._k_inner)
-        mean_error, intervals = regressor.run_on_data(X, y, n_repetitions=self._n_repetitions)
+        regressor = LinearRegressorWithNestedCV(k_outer=self._k_outer, k_inner=self._k_inner, quantiles=self._quantiles)
+        mean_error, intervals, miscoverage_rates = regressor.run_on_data(X, y, n_repetitions=self._n_repetitions)
 
         print(f"Estimated Prediction Error: {mean_error}")
         print("Confidence Intervals: ", intervals)
 
-        regressor.plot_graph()
-
+        #regressor.plot_graph()
+        return mean_error, intervals, miscoverage_rates
 
 def generate_linear_data(n_samples=1000, n_features=5, noise=0.2):
     """

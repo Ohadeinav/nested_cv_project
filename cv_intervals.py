@@ -82,8 +82,8 @@ class CvIntervalsTest:
         self._all_errors = []
         self._all_intervals = []
         self._miscoverage_rates = {}
-        self._X_data = X_data.to_numpy()
-        self._y_data = y_data.to_numpy()
+        self._X_data = X_data.to_numpy() if X_data is not None else None
+        self._y_data = y_data.to_numpy() if y_data is not None else None
 
     def _compute_miscoverage_rates(self):
         """
@@ -145,7 +145,7 @@ class CvIntervalsTest:
 
         # Calculate miscoverage rates
         self._miscoverage_rates = self._compute_miscoverage_rates()
-
+        return self._miscoverage_rates
     def plot_graph(self):
         # Extract the quantiles and intervals
         quantiles = list(self._all_intervals.keys())
