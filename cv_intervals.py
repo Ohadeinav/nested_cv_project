@@ -130,7 +130,7 @@ class CvIntervalsTest:
             self._X_data, self._y_data, _ = generate_linear_data(n_samples=1000, n_features=5, noise=0.34)
 
         # Run regressor
-        regressor = LinearRegressorWithClassicCV(k=5, test_size=0.2)
+        regressor = LinearRegressorWithClassicCV(k=5, test_size=0.2, ci=self._quantiles)
         test_mses, confidence_intervals = regressor.run_on_data(self._X_data,self._y_data, n_simulations=self._n_simulations)
 
         # Store all test errors and intervals

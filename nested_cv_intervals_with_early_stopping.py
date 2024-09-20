@@ -69,13 +69,9 @@ class NestedCV_LinearRegressorWithEarlyStopping:
                     # Check if the interval for the chosen quantile has stabilized (early stopping condition)
                     chosen_interval = confidence_intervals[self._early_stop_quantile]
 
-                    # Print the chosen interval bounds
-                    #print(f"Chosen Quantile: {self._early_stop_quantile}, Lower Bound: {chosen_interval[0]}, Upper Bound: {chosen_interval[1]}")
-
-                    # should we normalize by size of error??
                     if self.previous_interval is not None and inner_loop_iterations >= 1:
-                        if abs(chosen_interval[0] - self.previous_interval[0]) < self._epsilon and \
-                                abs(chosen_interval[1] - self.previous_interval[1]) < self._epsilon:
+                        if (abs(chosen_interval[0] - self.previous_interval[0]) + abs(chosen_interval[1] - self.previous_interval[1])
+                                < 2*self._epsilon):
                             #print(f"Early stopping triggered for quantile {self._early_stop_quantile} after {self.total_fits} fits.")
 
                             early_stopping_counter +=1
