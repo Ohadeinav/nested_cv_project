@@ -210,7 +210,7 @@ class NestedCV_LinearRegressorWithEarlyStopping:
 
 def generate_linear_data(n_samples=1000, n_features=5, noise=0.2):
     X = np.random.randn(n_samples, n_features)
-    true_coefficients = np.random.randn(n_features)
+    true_coefficients = [ 0.19938878,  0.36693129, -0.83037629,  1.11561449, -1.22679938]
     y = X.dot(true_coefficients) + np.random.normal(loc=0, scale=1, size=n_samples) * noise
     return X, y, true_coefficients
 
