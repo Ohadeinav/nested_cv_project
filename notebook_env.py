@@ -29,4 +29,6 @@ datasets_directory = os.path.expanduser('~/Documents/data/nested_cv_project')
 
 import cv_intervals
 import nested_cv_intervals
+import nested_cv_intervals_with_early_stopping
+
 

@@ -52,15 +52,17 @@ class LinearRegressorWithNestedCV:
                 self._inner_errors.append(np.mean(inner_errors))
 
                 # Train the model on the full training data (excluding test set)
-                self._model.fit(X_train_fold, y_train_fold)
+                model = LinearRegression()
+                model.fit(X_train_fold, y_train_fold)
+                #self._model.fit(X_train_fold, y_train_fold)
 
                 # Evaluate the model on the outer test set
-                y_val_pred = self._model.predict(X_val_fold)
+                y_val_pred = model.predict(X_val_fold)
                 outer_error = mean_squared_error(y_val_fold, y_val_pred)
 
                 # Store the outer test error
                 self._all_errors.append(outer_error)
-
+            self._model.fit(X_train, y_train)
             y_test_pred = self._model.predict(X_test)
             test_mse = mean_squared_error(y_test, y_test_pred)
             self.all_test_mses.append(test_mse)
@@ -78,7 +80,7 @@ class LinearRegressorWithNestedCV:
         self._miscoverage_rates = self._compute_miscoverage_rates()
 
         mean_error = np.mean(self._all_errors)
-        return mean_error, self._all_intervals
+        return mean_error, self._all_intervals, self._miscoverage_rates
 
     def inner_crossval(self, X, y):
         """
@@ -159,7 +161,6 @@ class LinearRegressorWithNestedCV:
 
         return miscoverage_rates
 
-
     def plot_graph(self):
         # Extract the quantiles and intervals
         quantiles = list(self._all_intervals.keys())
@@ -177,27 +178,23 @@ class LinearRegressorWithNestedCV:
 
         # Plot all error points per quantile, using transparency (alpha) to show density
         for i, q in enumerate(quantiles):
-            # Repeat the quantile value for each test error
-            # jittered_q = np.repeat(q, len(self._all_errors)) + np.random.uniform(-0.01, 0.01, size=len(self._all_errors))
-            # plt.scatter(jittered_q, self._all_errors, color='green', s=5, alpha=0.4, label='Test Errors' if i == 0 else "")
             jittered_q = np.repeat(q, len(self.all_test_mses)) + np.random.uniform(-0.01, 0.01,
-                                                                                 size=len(self.all_test_mses))
+                                                                                   size=len(self.all_test_mses))
             plt.scatter(jittered_q, self.all_test_mses, color='green', s=5, alpha=0.4,
                         label='Test Errors' if i == 0 else "")
 
-        # Annotate miscoverage rates below each quantile
+        # Add miscoverage rates to the legend
         for i, q in enumerate(quantiles):
             miscoverage_rate = self._miscoverage_rates[q]
-            plt.text(q, lower_bounds[i] - 0.05, f'Miscoverage: {miscoverage_rate:.2f}', ha='center', va='top',
-                     fontsize=9, color='black')
+            plt.plot([], [], ' ', label=f'Quantile {q}: Miscoverage {miscoverage_rate:.2f}')
 
         # Formatting the plot
         plt.xlabel('Quantiles')
         plt.ylabel('Error / Interval Bounds')
         plt.title('Test Errors and Confidence Intervals across Quantiles')
 
-        # Move the legend to the upper right outside the plot
-        plt.legend(loc='upper left', bbox_to_anchor=(1, 1), frameon=False)
+        # Move the legend to the right side of the graph
+        plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), frameon=False)
         plt.grid(True)
         plt.tight_layout()  # Adjust layout so the legend doesn't overlap
 
@@ -205,31 +202,32 @@ class LinearRegressorWithNestedCV:
 
 
 class CvIntervalsTest:
-    def __init__(self, n_repetitions=100, k_outer=5, k_inner=5):
+    def __init__(self, n_repetitions=100, quantiles =[0.7,0.8,0.9,0.95],k_outer=5, k_inner=5):
         self._n_repetitions = n_repetitions
         self._k_outer = k_outer
         self._k_inner = k_inner
+        self._quantiles = quantiles
 
     def run(self):
         # Generate data
-        X, y, _ = generate_linear_data(n_samples=1000, n_features=5, noise=0.34)
+        X, y, _ = generate_linear_data(n_samples=10000, n_features=5, noise=0.34)
 
         # Run regressor with nested cross-validation
-        regressor = LinearRegressorWithNestedCV(k_outer=self._k_outer, k_inner=self._k_inner)
-        mean_error, intervals = regressor.run_on_data(X, y, n_repetitions=self._n_repetitions)
+        regressor = LinearRegressorWithNestedCV(k_outer=self._k_outer, k_inner=self._k_inner, quantiles=self._quantiles)
+        mean_error, intervals, miscoverage_rates = regressor.run_on_data(X, y, n_repetitions=self._n_repetitions)
 
         print(f"Estimated Prediction Error: {mean_error}")
         print("Confidence Intervals: ", intervals)
 
-        regressor.plot_graph()
-
+        #regressor.plot_graph()
+        return mean_error, intervals, miscoverage_rates
 
 def generate_linear_data(n_samples=1000, n_features=5, noise=0.2):
     """
     Generates linear data with Gaussian noise for the regression problem.
     """
     X = np.random.randn(n_samples, n_features)
-    true_coefficients = np.random.randn(n_features)
+    true_coefficients = [ 0.19938878,  0.36693129, -0.83037629,  1.11561449, -1.22679938] #np.random.randn(n_features)
     y = X.dot(true_coefficients) + np.random.normal(loc=0, scale=1, size=n_samples) * noise
     return X, y, true_coefficients
 
